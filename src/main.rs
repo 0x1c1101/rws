@@ -113,6 +113,7 @@ fn get_links(content_raw: &str) -> Vec<String> {
 #[tokio::main]
 async fn main() {
     
+    
     let matches = App::new("Rust Web Scraper")
         .version("1.0")
         .author("heapoverfloww")
@@ -145,6 +146,21 @@ async fn main() {
         )
         .get_matches();
 
+    let banner = format!(
+        "\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
+        r#":::::::::  :::       :::  ::::::::  "#,
+        r#":+:    :+: :+:       :+: :+:    :+:"#,
+        r#"+:+    +:+ +:+       +:+ +:+        "#,
+        r#"+#++:++#:  +#+  +:+  +#+ +#++:++#++ "#,
+        r#"+#+    +#+ +#+ +#+#+ +#+        +#+ "#,
+        r#"#+#    #+#  #+#+# #+#+#  #+#    #+# "#,
+        r#"###    ###   ###   ###    ########  "#,
+        r#"------------------------------------"#,
+        r#"Rust Web Scraper      @heapoverfloww"#
+    );
+    
+    println!("{}",banner.truecolor(0, 255, 136));
+
     let mut url : &str = "";
     if let Some(val) = matches.value_of("u"){
         if is_valid_url(val){
@@ -156,6 +172,7 @@ async fn main() {
         }
     }
 
+    
         
     match get_body(url).await {
         Ok(body) => {
@@ -196,7 +213,7 @@ async fn main() {
 
             }
             if matches.is_present("l") {
-                println!("\n{}\n", "Links (href=\"\"):".red());
+                println!("\n{}\n", "Hyperlinks:".red());
 
                 let links = get_links(&body);
 
