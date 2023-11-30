@@ -8,17 +8,6 @@ use core::hash::Hash;
 
 // Operations Begin
 
-fn trim_whitespace(s: &str) -> String {
-    let mut new_str = s.trim().to_owned();
-    let mut prev = 'a';
-    new_str.retain(|ch| {
-        let result = ch != ' ' || prev != ' ';
-        prev = ch;
-        result
-    });
-    new_str
-}
-
 fn remove_duplicates<T: Eq + Hash + Clone>(vec: &mut Vec<T>) {
     let set: HashSet<_> = vec.drain(..).collect();
     vec.extend(set);
@@ -47,68 +36,55 @@ fn is_valid_url(input_url: &str) -> bool {
 
 // Operations End
 
-
-
-fn get_comments(content: &str) -> Vec<String> {
-    let mut comments = Vec::new();
+fn scrape (content: &str, comments: &mut Vec<String>, links: &mut Vec<String>, get_links: bool, get_comments: bool)
+{
     let mut in_comment = false;
-    let mut chars = String::new();
-
-    for c in content.chars() {
-        match c {
-            '>' if in_comment => {
-                chars.push(c);
-                if chars.ends_with("-->") {
-                    in_comment = false;
-                    chars.truncate(chars.len() - 3); // Removing "-->"
-                    comments.push(chars.clone()); // Adding it to the vector
-                    chars.clear();
-                }
-            }
-            _ => {
-                chars.push(c);
-
-                if !in_comment && chars.ends_with("<!--") {
-                    in_comment = true;
-                    chars.clear();
-                }
-            }
-        }
-    }
-    remove_duplicates(&mut comments);
-    comments
-}
-
-
-fn get_links(content_raw: &str) -> Vec<String> {
-    let mut links = Vec::new();
     let mut in_href = false;
     let mut chars = String::new();
-
-    let content = content_raw;
-    trim_whitespace(content);
-
+    let mut chars2 = String::new();
     for c in content.chars() {
-        match c {
-            '\"' if in_href => {
+
+        // Links
+        if get_links {
+            if c != ' ' {
+                chars2.push(c);
+            }
+            if in_href && chars2.ends_with("\"") {
                 in_href = false;
-                links.push(chars.clone()); // Adding it to the vector
+                chars2.truncate(chars2.len() - 1); // Removing "
+                links.push(chars2.clone()); // Adding it to the vector
+                chars2.clear();
+            }
+            else if !in_href && chars2.ends_with("href=\"") {
+                in_href = true;
+                chars2.clear();
+            }
+
+        }
+
+        if get_comments {
+            chars.push(c);
+            if chars.ends_with("-->") {
+                in_comment = false;
+                chars.truncate(chars.len() - 3); // Removing "-->"
+                comments.push(chars.clone()); // Adding it to the vector
                 chars.clear();
             }
-            _ => {
-                chars.push(c);
-
-                if !in_href && chars.ends_with("href=\"") {
-                    in_href = true;
-                    chars.clear();
-                }
+            else if !in_comment && chars.ends_with("<!--") {
+                in_comment = true;
+                chars.clear();
             }
         }
     }
 
-    remove_duplicates(&mut links);
-    links
+    if get_links { 
+        remove_duplicates(links);
+    }
+    if get_comments { 
+        remove_duplicates(comments);
+    }
 }
+
 
 #[tokio::main]
 async fn main() {
@@ -199,33 +175,32 @@ async fn main() {
                 }
             }
 
-            if matches.is_present("c"){
+            {
+                let mut comments : Vec<String> = vec![];
+                let mut links : Vec<String> = vec![];
+                scrape(&body, &mut comments, &mut links, matches.is_present("l"), matches.is_present("c"));
+                if matches.is_present("c"){
 
-                println!("\n{}\n", "Comments:".red());
-
-                let comments = get_comments(&body);
-                for comment in comments {
-                    if comment.len() < 2 { 
-                        continue;
+                    println!("\n{}\n", "Comments:".red());
+                    for comment in comments {
+                        if comment.len() < 2 { 
+                            continue;
+                        }
+                        println!("<!--\n{}\n-->", comment.green());
                     }
-                    println!("<!--\n{}\n-->", comment.green());
+
                 }
-
-            }
-            if matches.is_present("l") {
-                println!("\n{}\n", "Hyperlinks:".red());
-
-                let links = get_links(&body);
-
-                for link in links {
-                    if link.len() < 2 {
-                        continue;
+                if matches.is_present("l") {
+                    println!("\n{}\n", "Hyperlinks:".red());
+                    for link in links {
+                        if link.len() < 2 {
+                            continue;
+                        }
+                        println!("{}", link.green());
                     }
-                    println!("{}", link.green());
+
                 }
-
             }
-
             
 
         },
