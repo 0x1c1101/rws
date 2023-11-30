@@ -13,4 +13,8 @@ clap = "2.33"
 url = "2.3"
 colored = "2"
 
+[profile.dev]
+opt-level = 0
 
+[profile.release]
+opt-level = 3
