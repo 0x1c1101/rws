@@ -1,17 +1,15 @@
 use reqwest;
-use clap::{App, Arg};
-use url::Url;
-use std::process;
-use colored::Colorize;
-use std::collections::HashSet;
-use core::hash::Hash;
+use std::env;
+use std::time::Instant;
 
-// Operations Begin
+static COLOR_RED: &str = "\x1b[31m";
+static COLOR_GREEN: &str = "\x1b[32m";
+static COLOR_YELLOW: &str = "\x1b[33m";
+static COLOR_BLUE: &str = "\x1b[34m";
+static COLOR_MAGENTA: &str = "\x1b[35m";
+static COLOR_CYAN: &str = "\x1b[36m";
+static COLOR_RESET: &str = "\x1b[0m";
 
-fn remove_duplicates<T: Eq + Hash + Clone>(vec: &mut Vec<T>) {
-    let set: HashSet<_> = vec.drain(..).collect();
-    vec.extend(set);
-}
 
 async fn get_body(url: &str) -> Result<String, reqwest::Error> {
     let ua: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36";
@@ -27,14 +25,39 @@ async fn get_body(url: &str) -> Result<String, reqwest::Error> {
     Ok(body)
 }
 
-fn is_valid_url(input_url: &str) -> bool {
-    match Url::parse(input_url) {
-        Ok(_) => true,
-        Err(_) => false,
+fn is_valid_url(url: &str) -> bool {
+    if !url.contains(".") {
+        return false;
     }
+
+    true
+    
 }
 
-// Operations End
+fn get_root_url(mut newurl: String) -> String {
+    if !newurl.ends_with("/") {
+        newurl.push('/');
+    }
+
+    let mut begin : usize = 0;
+    let mut end : usize = 0;
+    let mut i : usize = 0;
+    for c in newurl.chars() {
+        if c == '.' {
+            begin = i;
+        }
+        else if c == '/' && begin != 0 && i > begin {
+            end = i + 1;
+            break;
+        }
+
+        i += 1;
+    }
+
+
+    newurl[0..end].to_string()
+}
+
 
 fn scrape (content: &str, comments: &mut Vec<String>, links: &mut Vec<String>, get_links: bool, get_comments: bool)
 {
@@ -76,54 +99,51 @@ fn scrape (content: &str, comments: &mut Vec<String>, links: &mut Vec<String>, g
             }
         }
     }
-
-    if get_links { 
-        remove_duplicates(links);
+    if get_links {
+        links.dedup();
     }
-    if get_comments { 
-        remove_duplicates(comments);
+    if get_comments {
+        comments.dedup();
     }
 }
 
+fn usage(arg: &String){
+    println!("{COLOR_RED}Usage: {} <URL> <OPTS>", arg);
+    println!("Current options:");
+    println!("r: Read robots.txt");
+    println!("c: List comment lines in the page");
+    println!("l: List hyperlinks in the page");
+    println!("A: Enable all options");
+    println!("\n{COLOR_YELLOW}Example: {} https://example.com rlc{COLOR_RESET}", arg);
+}
 
 #[tokio::main]
 async fn main() {
-    
-    
-    let matches = App::new("Rust Web Scraper")
-        .version("1.0")
-        .author("heapoverfloww")
-        .about("A web scraper to enumerate web content written in Rust")
-        .arg(
-            Arg::with_name("l")
-                .short("l")
-                .long("links")
-                .help("Get links"),
-        )
-        .arg(
-            Arg::with_name("c")
-                .short("c")
-                .long("comments")
-                .help("Get Comment Lines"),
-        )
-        .arg(
-            Arg::with_name("r")
-                .short("r")
-                .long("robots")
-                .help("Get robots.txt"),
-        )
-        .arg(
-            Arg::with_name("u")
-                .short("u")
-                .long("url")
-                .takes_value(true)
-                .help("Specify a URL to send request")
-                .required(true)
-        )
-        .get_matches();
+    let args: Vec<String> = env::args().collect();
+
+    if args.len() < 3 {
+        usage(&args[0]);
+        return;
+    }
+
+    let start_time = Instant::now();
+
+
+    let url = &args[1];
+    let opts = &args[2];
+
+    if !is_valid_url(url){
+        println!("{COLOR_RED}Please provide a valid URL.{COLOR_RESET}");
+        return;
+    }
+
+    if !opts.contains(['A', 'c', 'l', 'r']){
+        usage(&args[0]);
+        return;
+    }
 
     let banner = format!(
-        "\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
+        "{COLOR_CYAN}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{COLOR_RESET}",
         r#":::::::::  :::       :::  ::::::::  "#,
         r#":+:    :+: :+:       :+: :+:    :+:"#,
         r#"+:+    +:+ +:+       +:+ +:+        "#,
@@ -135,77 +155,56 @@ async fn main() {
         r#"Rust Web Scraper      @heapoverfloww"#
     );
     
-    println!("{}",banner.truecolor(0, 255, 136));
-
-    let mut url : &str = "";
-    if let Some(val) = matches.value_of("u"){
-        if is_valid_url(val){
-            url = val;
-        }
-        else {
-            println!("{} is not a valid URL", val);
-            process::exit(1);
-        }
-    }
-
+    println!("{}",banner);
     
-        
-    match get_body(url).await {
+
+    match get_body(&url).await {
         Ok(body) => {
             
-            if matches.is_present("r") {
-                let url_parsed = Url::parse(url).expect("Failed to parse URL");
-                let root_url = format!(
-                    "{}://{}{}/robots.txt",
-                    url_parsed.scheme(),
-                    url_parsed.host_str().unwrap(),
-                    if let Some(port) = url_parsed.port() {
-                        format!(":{}", port)
-                    } else {
-                        "".to_string()
-                    }
-                );
-            
-                match get_body(&root_url).await {
+            if opts.contains(['A', 'r']) {
+                
+                let newurl = get_root_url(url.clone()) + "robots.txt";
+                match get_body(&newurl).await {
                     Ok(robots) => {
-                        println!("\n{}\n", "robots.txt:".red());
-                        println!("{}", robots.green());
+                        println!("{COLOR_BLUE}\nrobots.txt:\n\n{}", robots);
                     },
                     Err(err) => eprintln!("Failed to get robots.txt: {:?}", err),
                 }
+                
+                
+
             }
 
-            {
-                let mut comments : Vec<String> = vec![];
-                let mut links : Vec<String> = vec![];
-                scrape(&body, &mut comments, &mut links, matches.is_present("l"), matches.is_present("c"));
-                if matches.is_present("c"){
+            let mut comments : Vec<String> = vec![];
+            let mut links : Vec<String> = vec![];
+            scrape(&body, &mut comments, &mut links, opts.contains(['A', 'l']), opts.contains(['A', 'c']));
+            if opts.contains(['A', 'c']){
 
-                    println!("\n{}\n", "Comments:".red());
-                    for comment in comments {
-                        if comment.len() < 2 { 
-                            continue;
-                        }
-                        println!("<!--\n{}\n-->", comment.green());
+                println!("\n{COLOR_GREEN}Comments:\n");
+                for comment in comments {
+                    if comment.len() < 2 { 
+                        continue;
                     }
-
+                    println!("{}\n---", comment);
                 }
-                if matches.is_present("l") {
-                    println!("\n{}\n", "Hyperlinks:".red());
-                    for link in links {
-                        if link.len() < 2 {
-                            continue;
-                        }
-                        println!("{}", link.green());
+
+            }
+            if opts.contains(['A', 'l']) {
+                println!("\n{COLOR_MAGENTA}Hyperlinks:\n");
+                for link in links {
+                    if link.len() < 2 {
+                        continue;
                     }
-
+                    println!("{}", link);
                 }
+
             }
             
-
+            
         },
         Err(e) => eprintln!("Failed to get HTML content: {:?}", e),
     }
 
-
+    let elapsed_time = Instant::now() - start_time;
+    println!("\n{COLOR_YELLOW}It took {} seconds!", elapsed_time.as_secs_f64());
 }
